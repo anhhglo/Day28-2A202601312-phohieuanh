@@ -28,3 +28,59 @@
     "p99": 851.7914240001119
   }
 }
+
+================================================================================
+# Phân tích nút thắt
+================================================================================
+
+## Đo 1 — liveness so với readiness (FastAPI trực tiếp, 100 request, 8 worker)
+
+  /health   p50   5,6 ms   p95   8,0 ms   p99   9,7 ms
+  /ready    p50 306,9 ms   p95 799,2 ms   p99 879,8 ms
+
+`/health` không chạm dependency nào; `/ready` probe toàn bộ. Chênh **55 lần**
+nói thẳng: nút thắt KHÔNG nằm ở FastAPI hay ở tầng HTTP, mà nằm ở việc probe
+dependency được thực hiện **đồng bộ trên mỗi request**.
+
+## Đo 2 — thời gian từng probe, đo ngay trong container API (5 lần, ms)
+
+  mlflow    386,6      <-- chiếm phần lớn
+  qdrant    146,2
+  kafka      25,0
+  feast      15,0
+  vllm       14,8      (ConnectError trả về nhanh, không phải timeout)
+
+Đối chiếu: gọi thẳng HTTP tới các dịch vụ đó từ host chỉ mất 1–6 ms
+(mlflow 5,6 · qdrant 1,3 · feast 1,1). Vậy chi phí nằm ở **phía client**, không
+phải ở server. Với MLflow, mỗi lần probe đều `download_artifacts` để phân giải
+alias `champion` — thấy rõ trong log API là dòng `Downloading artifacts:` lặp lại
+sau mỗi lần gọi `/ready`.
+
+## Đo 3 — quét mức đồng thời trên /ready (96 request mỗi mức)
+
+  workers=1    p50 242,2   p95  537,3   p99  613,1
+  workers=2    p50 254,5   p95  374,3   p99  572,6
+  workers=4    p50 257,0   p95  569,8   p99  692,7
+  workers=8    p50 308,0   p95  376,4   p99  474,6
+  workers=16   p50 421,8   p95 1010,3   p99 1072,0
+  workers=32   p50 805,9   p95 1153,9   p99 1395,8
+
+p50 gần như phẳng tới 4 worker rồi tăng gần tuyến tính với mức đồng thời
+(8 → 16 → 32 cho 308 → 422 → 806 ms). Đó là dấu hiệu kinh điển của **hết
+headroom**: thêm tải không tăng thông lượng mà chỉ xếp hàng dài thêm. Điểm bão
+hoà nằm quanh **8 worker**.
+
+## Kết luận
+
+1. Nút thắt là **phân giải release trên MLflow** (~387/588 ms ≈ 66% tổng thời
+   gian probe), do tải artifact lại ở mỗi lần gọi.
+2. Cách sửa đúng không phải thêm CPU mà là **cache kết quả probe**: alias
+   `champion` đổi theo phút chứ không theo request. Cache 5–10 giây với
+   single-flight sẽ kéo p50 của `/ready` từ ~307 ms về gần mức của `/health`.
+3. Trước khi cache, `/ready` không nên đặt ở đường nóng có tần suất cao:
+   readiness probe của Kubernetes mặc định 10 s/lần thì hoàn toàn ổn, nhưng để
+   load balancer gọi mỗi request thì chính nó trở thành nguồn tải.
+4. Envoy rate limit 10 rps đứng trước API vô tình che mất vấn đề này: đo qua
+   gateway chỉ thấy 13/200 request đi lọt, p50 0,8 ms — con số đẹp nhưng vô
+   nghĩa, vì 187 request còn lại bị chặn từ trước khi chạm ứng dụng. Đây là lý
+   do phải đo **cả hai** đường.

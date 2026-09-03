@@ -111,15 +111,63 @@ vọt). Hệ quả kép:
 
 **Cách sửa (không đụng file nào của lab):** neo giờ tường vào `CLOCK_MONOTONIC`
 bằng một `sitecustomize.py`, tiêm qua `PYTHONPATH` trong `compose.override.yaml`
-(file này đã cho vào `.gitignore`). Đo lại trong container: drift từ 579,6 s về
-**0,00 s**. J2 pass 9/9, toàn bộ suite 56/56.
+(file này đã cho vào `.gitignore`).
 
-Bài học rút ra: khi thông báo lỗi trỏ vào một tầng (ở đây là *xác thực*) mà mã ở
-tầng đó không có gì sai, hãy nghi ngờ **nền tảng bên dưới** trước khi sửa mã. Dấu
-hiệu quyết định là so `run_after` với `date -u` — lệch dương vài phút thì không
-còn là chuyện cấu hình nữa. Bản vá đúng phải lấy `min(wall − monotonic)` trên một
-cửa sổ **dài hơn** một cú vọt; các bản vá "chống giảm" hay "thấy lệch thì neo lại"
-đều bám nhầm vào đỉnh vọt và làm process chạy nhanh vĩnh viễn 9 phút.
+Bản vá đầu tiên của tôi **chưa đủ**, và tôi chỉ phát hiện khi đo lại chứ không
+phải khi thấy test xanh:
+
+- Nó chỉ vá `time.time()`. Nhưng `datetime.now()` của CPython gọi thẳng đồng hồ
+  hệ thống ở tầng C, **không** đi qua `time.time()` — đo lại trong container:
+  `time.time()` lệch 0,00 s trong khi `datetime.now()` **vẫn lệch 579,55 s**.
+  Airflow đóng dấu `dag_run.run_after` bằng `datetime`, nên nguyên nhân số 2 ở
+  trên vẫn còn nguyên; suite xanh hai lần liên tiếp chỉ là chưa gặp xác suất xấu.
+- Nó thay `time.localtime` bằng một **hàm Python thuần**. `time.localtime` gốc là
+  builtin nên `logging.Formatter.converter = time.localtime` truy cập qua
+  `self.converter` không bị bind; hàm Python thuần thì bị bind thành method, nên
+  `logging` gọi thành hai đối số và ném
+  `TypeError: localtime() takes from 0 to 1 positional arguments but 2 were given`
+  mỗi lần MLflow ghi một warning trong container API.
+
+Tôi đã thử vá tiếp `datetime` và **phải bỏ**. Thay `datetime.datetime` bằng một
+lớp con đọc giờ đã lọc thì hỏng ở hai chỗ độc lập nhau, cả hai đều đo được:
+
+1. **MLflow treo lúc import.** MLflow suy diễn schema từ type hint pydantic ngay
+   khi import; một lớp con của `datetime` làm bước đó treo vô hạn.
+   `import lab28_platform.model_registry` chạy 0,7 s khi không vá, treo >60 s khi
+   vá; `pytest --collect-only` ăn 100% CPU suốt 51 phút mà không xong.
+2. **Airflow kiểm tra kiểu nghiêm ngặt.** `airflow/utils/sqlalchemy.py:158` ném
+   `TypeError: expected datetime.datetime, not datetime.datetime(...)` — thông
+   báo trông vô lý cho tới khi nhận ra nó so **đúng lớp**, không phải `isinstance`.
+   dag-processor crash, `POST /api/v2/.../dagRuns` trả 500.
+
+**Bản vá cuối cùng** vì thế chỉ gồm hai thứ, áp cho container `airflow`, `api`,
+`feast` và cho shell chạy pytest/CLI:
+
+- `time.time()` / `time.time_ns()` neo vào `CLOCK_MONOTONIC` — đây là thứ sửa
+  được lỗi chí mạng (JWT `iat` ở tương lai làm task fail cả 3 lần thử);
+- `time.localtime` / `gmtime` thay bằng **instance của một class có `__call__`**
+  thay vì hàm Python thuần, vì instance không phải descriptor nên không bị bind.
+
+Đo lại: `time.time()` lệch **0,00 s** trong cả container Airflow lẫn API,
+`logging` hết lỗi, `import model_registry` 0,7 s, host collect đủ 72 test trong
+0,62 s.
+
+**Rủi ro còn lại, nêu rõ để không nhận công quá phần đã làm:** `run_after` vẫn
+được Airflow đóng dấu bằng `datetime`, nên khoảng **4% số lần trigger DAG** vẫn
+có thể bị đẩy về tương lai và nằm `queued` tới 9,7 phút, vượt mốc 300 s mà test
+chờ. Không vá được ở tầng Python; sửa gốc cần quyền root trên host WSL2. Cách xử
+lý khi gặp: chạy lại chính test đó — bằng chứng là run kẹt trong log
+`incident-drill` ban đầu cuối cùng vẫn tự chạy và kết thúc.
+
+Bài học có ba phần. Thứ nhất: khi thông báo lỗi trỏ vào một tầng (ở đây là *xác
+thực*) mà mã ở tầng đó không có gì sai, hãy nghi ngờ **nền tảng bên dưới** trước
+khi sửa mã — dấu hiệu quyết định là so `run_after` với `date -u`. Thứ hai:
+**test xanh không chứng minh bản vá đúng** — bản vá `time.time()` cho 56/56 xanh
+hai lần liên tiếp trong khi vẫn để hở một nửa nguyên nhân; chỉ phép đo trực tiếp
+mới phân biệt được "đã sửa" với "chưa gặp lại". Thứ ba: **một bản vá hạ tầng phải
+được giới hạn ở phạm vi nhỏ nhất có tác dụng, và phải biết dừng.** Bản vá
+`datetime` về mặt kỹ thuật thì đúng — nó thật sự khử được cú vọt — nhưng nó phá
+hai thư viện lớn, và một bản vá đúng-mà-hỏng-hệ-thống thì tệ hơn là không vá.
 
 ## 7. Trade-off đã chọn
 
@@ -159,7 +207,14 @@ cửa sổ **dài hơn** một cú vọt; các bản vá "chống giảm" hay "t
    kết quả probe vài giây.
 5. **Đồng hồ là một dependency.** Bài học lớn nhất buổi này: nên có một check
    `clock_skew` trong `/ready` (so `time.time()` với `time.monotonic()` qua một
-   cửa sổ), vì đồng hồ lệch làm mọi tầng khác báo lỗi sai chỗ.
+   cửa sổ dài hơn một cú vọt), vì đồng hồ lệch làm mọi tầng khác báo lỗi sai chỗ.
+6. **Cache kết quả probe của `/ready`.** Đo được nút thắt: `/health` p50 5,6 ms
+   trong khi `/ready` p50 307 ms, và 387/588 ms thời gian probe là do MLflow tải
+   lại artifact ở **mỗi** lần gọi để phân giải alias `champion`. Alias đổi theo
+   phút chứ không theo request, nên một cache 5–10 giây kèm single-flight sẽ kéo
+   `/ready` về gần `/health`. Quét mức đồng thời cho thấy hệ thống hết headroom
+   quanh 8 worker (p50 308 → 422 → 806 ms khi lên 8 → 16 → 32). Chi tiết trong
+   `submission/load-profile.txt`.
 
 ## 9. Ghi chú môi trường (không thuộc bài làm)
 

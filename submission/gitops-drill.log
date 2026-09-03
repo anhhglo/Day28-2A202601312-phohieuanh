@@ -1,0 +1,46 @@
+# GitOps: desired state, drift, self-heal, rollback — 2026-09-03T10:41:40Z
+
+Máy chạy bài KHÔNG có cluster Kubernetes (không có kubectl/kustomize), nên
+phần này chứng minh ở tầng DESIRED STATE — thứ Argo CD thực sự đối chiếu.
+Không giả lập output của cluster.
+
+===== 1. Desired state khai báo trong gitops/application.yaml =====
+  namespace: argocd
+    targetRevision: refs/tags/v3.0.0
+    path: deploy/kubernetes/base
+    namespace: lab28
+      prune: true
+      selfHeal: true
+  revisionHistoryLimit: 5
+
+  targetRevision: tag bất biến -> ROLLBACK = trỏ về tag trước, không sửa mã.
+  selfHeal: true             -> mọi thay đổi thủ công trên cluster bị hoàn tác.
+  prune: true                -> tài nguyên bị xoá khỏi git thì bị xoá khỏi cluster.
+  revisionHistoryLimit: 5    -> giữ 5 revision để quay lui.
+
+===== 2. Manifest hợp lệ trước khi có drift =====
+Kubernetes and GitOps manifest contracts passed
+
+===== 3. INJECT DRIFT — sửa replicas ngay trên bản sao working tree =====
+10:  replicas: 2
+  sau khi sửa:
+10:  replicas: 9
+
+  git thấy drift (đây chính là thứ Argo so sánh live-state với desired-state):
+ deploy/kubernetes/base/api.yaml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+-  replicas: 2
++  replicas: 9
+
+===== 4. Manifest vẫn hợp lệ về schema — drift KHÔNG bị validator bắt =====
+Kubernetes and GitOps manifest contracts passed
+  -> bài học: validator chỉ chặn manifest SAI, không chặn manifest ĐÚNG-nhưng-lệch.
+     Phát hiện drift là việc của reconciler, không phải của CI.
+
+===== 5. SELF-HEAL — reconcile về desired state trong git =====
+10:  replicas: 2
+  git diff sau self-heal (rỗng = đã khớp desired state):
+  (rỗng)
+
+===== 6. Kiểm tra lại sau khi khôi phục =====
+Kubernetes and GitOps manifest contracts passed

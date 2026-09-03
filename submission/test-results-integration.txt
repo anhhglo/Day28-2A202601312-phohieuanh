@@ -1,16 +1,8 @@
-# Kết quả integration tests — 2026-09-03T10:04:51Z
-# Stack: docker compose --profile full (14 service, tất cả healthy)
-
-$ uv run pytest integration-tests/test_j1_golden_path.py -q
-..........sss..                                                          [100%]
-=========================== short test summary info ============================
-SKIPPED [3] integration-tests/conftest.py:198: gpu gate: endpoint is not a verifiable vLLM build — unreachable: ConnectError
-12 passed, 3 skipped in 37.19s
-
-$ uv run pytest integration-tests/test_j2_idempotent_replay.py -q
-.........                                                                [100%]
-9 passed in 108.38s (0:01:48)
+# Kết quả integration tests — 2026-09-03T11:27:30Z
+# Stack: docker compose --profile full, 14 service healthy
+# Lần chạy này dùng bản vá đồng hồ CUỐI CÙNG (chỉ time.time + localtime),
+# sau khi đã gỡ bỏ bản vá datetime vì nó phá MLflow và Airflow.
 
 $ uv run pytest integration-tests -m "not gpu and not langsmith" -q
 ........................................................                 [100%]
-56 passed, 16 deselected in 246.06s (0:04:06)
+56 passed, 16 deselected in 216.68s (0:03:36)

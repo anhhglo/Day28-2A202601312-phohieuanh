@@ -56,11 +56,30 @@ Load profile (`load-profile.txt`): qua gateway 200 request/8 worker → 13×200 
 187×429, chứng minh rate limit 10 rps của Envoy chặn đúng; đo trực tiếp FastAPI
 `/ready` → 200/200 thành công, p50 314 ms, p95 621 ms, p99 852 ms.
 
-## 4. Sự cố và khôi phục
+## 4. Kubernetes / GitOps (IP08 tầng triển khai)
+
+`gitops-drill.log` — máy chạy bài không có cluster nên phần này chứng minh ở
+tầng **desired state**, thứ Argo CD thực sự đối chiếu, và nói rõ là không giả
+lập output của cluster:
+
+- `scripts/validate_manifests.py` PASS: đủ 9 kind bắt buộc (Deployment, Service,
+  ServiceAccount, ConfigMap, HPA, PodDisruptionBudget, NetworkPolicy, Gateway,
+  HTTPRoute), Deployment chạy non-root.
+- `gitops/application.yaml`: `targetRevision: refs/tags/v3.0.0` (tag bất biến →
+  rollback là trỏ về tag trước, không sửa mã), `selfHeal: true` (hoàn tác thay
+  đổi thủ công), `prune: true` (xoá khỏi git thì xoá khỏi cluster),
+  `revisionHistoryLimit: 5`.
+- Drift injected: `replicas: 2 → 9`. Điểm đáng nói là validator **vẫn PASS** —
+  manifest lệch nhưng không sai. Phát hiện drift là việc của reconciler chứ
+  không phải của CI.
+- Self-heal: reconcile về desired state trong git, `git diff` rỗng, validator
+  PASS lại.
+
+## 5. Sự cố và khôi phục
 
 Xem `incident-drill.log` (nhật ký đầy đủ) và mục tương ứng trong `ANSWERS.md`.
 
-## 5. Promotion và rollback
+## 6. Promotion và rollback
 
 Xem `rollback-drill.log`: champion v1 → `lab28 release` → v4 → `lab28 rollback`
 → v3. Không sửa một dòng mã nào giữa hai lần.
