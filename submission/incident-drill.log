@@ -1,0 +1,52 @@
+
+===== T0 BASELINE — 2026-09-03T10:03:05Z =====
+status: degraded
+   kafka ready= True | 1 broker(s); 4 declared topics present
+   mlflow ready= True | lab28-rag-release v1 is champion
+   qdrant ready= True | 20 points; ok
+   vllm ready= False | unreachable: ConnectError
+   feast ready= True | ok
+delta.feedback: version=16 rows=25
+delta.documents: version=10 rows=20
+
+===== T1 INJECT — dừng feast (dependency KHÔNG bắt buộc). Dự đoán: degraded, /ready vẫn HTTP 200 =====
+ Container lab28-platform-feast-1 Stopped 
+
+===== T2 OBSERVE =====
+http=200
+http=200
+status: degraded
+   kafka ready= True | 1 broker(s); 4 declared topics present
+   mlflow ready= True | lab28-rag-release v1 is champion
+   qdrant ready= True | 20 points; ok
+   vllm ready= False | unreachable: ConnectError
+   feast ready= False | unreachable: ConnectError
+
+===== T3 LEO THANG — dừng thêm qdrant (dependency BẮT BUỘC). Dự đoán: not_ready + HTTP 503 =====
+ Container lab28-platform-qdrant-1 Stopped 
+http=503
+status: not_ready
+   kafka ready= True | 1 broker(s); 4 declared topics present
+   mlflow ready= True | lab28-rag-release v1 is champion
+   qdrant ready= False | 0 points; ResponseHandlingException: [Errno -2] Name or serv
+   vllm ready= False | unreachable: ConnectError
+   feast ready= False | unreachable: ConnectError
+
+===== T4 RECOVER — khởi động lại qdrant + feast =====
+ Container lab28-platform-runtime-init-1 Exited 
+ Container lab28-platform-qdrant-1 Healthy 
+ Container lab28-platform-feast-1 Healthy 
+
+===== T5 VERIFY — /ready trở lại degraded (chỉ còn vllm thiếu) =====
+http=200
+status: degraded
+   kafka ready= True | 1 broker(s); 4 declared topics present
+   mlflow ready= True | lab28-rag-release v1 is champion
+   qdrant ready= True | 20 points; ok
+   vllm ready= False | unreachable: ConnectError
+   feast ready= True | ok
+
+===== T6 NO DATA LOSS — Delta version/rows so với T0 (feedback v16/25 rows, documents v10/20 rows) =====
+delta.feedback: version=16 rows=25
+delta.documents: version=10 rows=20
+qdrant points: 20

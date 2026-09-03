@@ -1,0 +1,22 @@
+# Kết quả kiểm thử phần mã — 2026-09-03T10:04:39Z
+
+$ uv run pytest starter-tests -q
+....                                                                     [100%]
+4 passed in 0.05s
+
+$ uv run pytest tests -q
+........................................................................ [ 86%]
+...........                                                              [100%]
+83 passed in 2.23s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run python scripts/verify_matrix.py
+OK    245 checks passed: contracts/integration-matrix.yaml matches the repository
+
+$ uv run python scripts/check_portability.py
+OK    supported workflow is host-path and shell independent
+
+$ uv run python scripts/validate_manifests.py
+Kubernetes and GitOps manifest contracts passed

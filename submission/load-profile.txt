@@ -1,0 +1,30 @@
+# Load profile — 2026-09-03T10:11:41Z
+
+## Qua Envoy gateway (rate limit 10 rps — 429 hiện ra dưới dạng status 0 vì urllib coi là exception)
+{
+  "requests": 200,
+  "workers": 8,
+  "status_counts": {
+    "200": 13,
+    "0": 187
+  },
+  "latency_ms": {
+    "p50": 0.8367479986191029,
+    "p95": 252.19978699897183,
+    "p99": 328.0514640009642
+  }
+}
+
+## Trực tiếp FastAPI (bỏ qua rate limit — đo độ trễ ứng dụng)
+{
+  "requests": 200,
+  "workers": 8,
+  "status_counts": {
+    "200": 200
+  },
+  "latency_ms": {
+    "p50": 314.4864320001943,
+    "p95": 620.9404029996222,
+    "p99": 851.7914240001119
+  }
+}

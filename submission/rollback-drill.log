@@ -1,0 +1,53 @@
+===== T0 champion hiện tại =====
+{
+  "reachable": true,
+  "has_champion": true,
+  "version": "1",
+  "run_id": "577f040512794409818ccb8c4f4715f2",
+  "detail": "lab28-rag-release v1 is champion"
+}
+
+===== T1 release phiên bản mới (promote) =====
+🧪 View experiment at: http://localhost:5000/#/experiments/1
+{
+  "name": "lab28-rag-release",
+  "version": "4",
+  "run_id": "66c03021856240c09d7bc89465120b5d",
+  "alias": "champion",
+  "prompt_version": "v1",
+  "vllm_model_id": "Qwen/Qwen3-1.7B",
+  "embedding_model_id": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@faf4aa4225822f3bc6376869cb1164e8e3feedd0",
+  "delta_version": 16,
+  "top_k": 3
+}
+
+===== T2 champion sau promote =====
+{
+  "reachable": true,
+  "has_champion": true,
+  "version": "4",
+  "run_id": "66c03021856240c09d7bc89465120b5d",
+  "detail": "lab28-rag-release v4 is champion"
+}
+
+===== T3 rollback về phiên bản trước =====
+{
+  "name": "lab28-rag-release",
+  "version": "3",
+  "run_id": "1c5c627ff88547b0b80fe31252ab23fb",
+  "alias": "champion",
+  "prompt_version": "it-j3-54ce21ae",
+  "vllm_model_id": "Qwen/Qwen3-1.7B",
+  "embedding_model_id": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@faf4aa4225822f3bc6376869cb1164e8e3feedd0",
+  "delta_version": 13,
+  "top_k": 3
+}
+
+===== T4 champion sau rollback =====
+{
+  "reachable": true,
+  "has_champion": true,
+  "version": "3",
+  "run_id": "1c5c627ff88547b0b80fe31252ab23fb",
+  "detail": "lab28-rag-release v3 is champion"
+}

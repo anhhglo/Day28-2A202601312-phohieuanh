@@ -1,0 +1,18 @@
+{
+  "written": {
+    "ip03-delta-history.json": "evidence/ip03-delta-history.json",
+    "ip05-qdrant-search.json": "evidence/ip05-qdrant-search.json",
+    "ip06-mlflow-release.json": "evidence/ip06-mlflow-release.json",
+    "ip07-vllm-identity.json": "evidence/ip07-vllm-identity.json",
+    "integration-report.json": "evidence/integration-report.json"
+  },
+  "failed": {},
+  "outstanding": {
+    "ip01-kafka-consume.json": "integration test: consume from data.raw and keep the headers",
+    "ip02-airflow-run.json": "Airflow: DAG run id, task states, asset event",
+    "ip04-feast-online.json": "Feast: online row after materialization",
+    "ip08-gateway.json": "gateway: a 200 and a 429 with x-request-id",
+    "ip09-prometheus-targets.json": "Prometheus: targets and alert rules",
+    "ip10-trace.json": "trace backend: one trace carrying the required span names"
+  }
+}
