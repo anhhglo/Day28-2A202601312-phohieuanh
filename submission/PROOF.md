@@ -18,6 +18,37 @@ Test duy nhất bị bỏ qua là nhóm `langsmith`, vì lớp không cấp `LAN
 Phần mã: 4 + 83 test, ruff sạch, `verify_matrix` 245 checks, `check_portability`,
 `validate_manifests` đều rc 0.
 
+## 0. Kiến trúc và phân vai (SUBMISSION.md mục 3)
+
+Sơ đồ: [`docs/images/lab28-architecture-overview.png`](../docs/images/lab28-architecture-overview.png)
+(bản vector: `.svg`). Đọc theo ba vùng — luồng chính, dữ liệu/mô hình, giám sát.
+
+Bảng phân vai lấy từ `contracts/integration-matrix.yaml`, là nguồn duy nhất gán
+mỗi điểm kết nối cho một chủ sở hữu. Làm **cá nhân**, nên tôi đi qua cả năm vai;
+cột cuối ghi thành phần thực tế phải đụng tới.
+
+| IP | Tầng | Vai chủ sở hữu | Ranh giới | Thành phần |
+|---|---|---|---|---|
+| IP01 | L2 Data | team-ingestion | Ingest → Kafka | FastAPI producer, `data.raw` |
+| IP02 | L2 Data | team-ingestion | Kafka → Airflow | consumer, retry, `data.raw.dlq` |
+| IP03 | L2 Data | team-data | Pipeline → Delta | Spark Connect, MERGE |
+| IP04 | L3 ML | team-data | Delta → Feast | materialize, online store |
+| IP05 | L2 Data | team-serving | Delta → Qdrant | embedding, hybrid index |
+| IP06 | L3 ML | team-data | Delta → MLflow | registry, alias `champion` |
+| IP07 | L1 Compute | team-serving | API → vLLM | vLLM 0.28 trên RTX 5080 |
+| IP08 | L1 Compute | team-platform | Client → Envoy → API | routing, rate limit, health |
+| IP09 | L4 Ops | team-platform | Tất cả → Prometheus/Grafana | scrape, dashboard, alert |
+| IP10 | L4 Ops | team-platform | Tất cả → OTel/Jaeger | collector, trace liên tục |
+
+Vai thứ năm, **Presenter / Incident Commander**, không sở hữu IP nào mà sở hữu
+phần trình bày: `submission/DEMO-SCRIPT.md` (kịch bản + câu hỏi hay gặp),
+`submission/incident-drill.log` (sự cố có dự đoán trước) và bộ `evidence/`.
+
+Ba vùng của sơ đồ ánh xạ sang bốn tầng của ma trận: **L1 Compute** (IP07, IP08)
+là nơi request được phục vụ; **L2 Data** (IP01, IP02, IP03, IP05) là đường dữ
+liệu đi vào; **L3 ML** (IP04, IP06) là nơi dữ liệu thành đặc trưng và mô hình;
+**L4 Ops** (IP09, IP10) quan sát toàn bộ ba tầng kia.
+
 ## 1. Luồng chạy đúng (J1 golden path)
 
 | Bước | Bằng chứng | Giá trị |
