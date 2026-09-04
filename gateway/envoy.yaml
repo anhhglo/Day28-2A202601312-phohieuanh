@@ -74,10 +74,19 @@ static_resources:
           interval: 2s
           unhealthy_threshold: 1
           healthy_threshold: 1
-          # Liveness decides whether Envoy can route. Application readiness is
-          # deliberately proxied so students can see the exact degraded
-          # dependency report instead of an opaque "no healthy upstream".
-          http_health_check: {path: /health}
+          # Rotation follows READINESS, not liveness. /health stays 200 for as
+          # long as the process can serve HTTP, so health-checking it leaves an
+          # unready pod in rotation and the gateway keeps forwarding traffic to
+          # a pod that has already said it cannot serve. /ready is the endpoint
+          # that answers "send me traffic?": 200 while ready or degraded, 503
+          # once a mandatory dependency is gone.
+          #
+          # The degraded dependency report is still visible through the gateway,
+          # because `degraded` answers 200 and stays in rotation. Only
+          # `not_ready` ejects the host — and with healthy_panic_threshold 0
+          # below, a single ejected host means the caller gets Envoy's own 503
+          # instead of a proxied one.
+          http_health_check: {path: /ready}
       common_lb_config:
         healthy_panic_threshold: {value: 0}
     - name: otel_collector

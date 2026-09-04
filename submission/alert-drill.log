@@ -1,0 +1,19 @@
+# Alert drill — 2026-09-04T03:59:54Z
+# Rule: Lab28ApiUnavailable, expr up{job="lab28-api"}==0, for=30s, severity=critical
+
+===== T0 bình thường =====
+  đang active: [('Lab28HighErrorRatio', 'firing')]
+
+===== T1 dừng API — dự đoán: pending sau ~15s, firing sau ~45s =====
+ Container lab28-platform-api-1 Stopped 
+  sau 04:00:18:
+  đang active: [('Lab28ApiUnavailable', 'pending'), ('Lab28HighErrorRatio', 'firing')]
+  sau 04:00:43:
+  đang active: [('Lab28ApiUnavailable', 'firing'), ('Lab28HighErrorRatio', 'firing')]
+  sau 04:01:08:
+  đang active: [('Lab28ApiUnavailable', 'firing'), ('Lab28HighErrorRatio', 'firing')]
+
+===== T2 khôi phục API =====
+ Container lab28-platform-api-1 Healthy 
+  sau khi khôi phục:
+  đang active: [('Lab28HighErrorRatio', 'firing')]

@@ -1,52 +1,60 @@
 
-===== T0 BASELINE — 2026-09-03T10:03:05Z =====
-status: degraded
+===== T0 BASELINE — 2026-09-04T03:56:30Z — vLLM thật đang chạy, dự đoán: ready =====
+api /ready http=200
+gateway /ready http=200
+status: ready
    kafka ready= True | 1 broker(s); 4 declared topics present
-   mlflow ready= True | lab28-rag-release v1 is champion
-   qdrant ready= True | 20 points; ok
-   vllm ready= False | unreachable: ConnectError
+   mlflow ready= True | lab28-rag-release v8 is champion
+   qdrant ready= True | 37 points; ok
+   vllm ready= True | vLLM identity confirmed
    feast ready= True | ok
-delta.feedback: version=16 rows=25
-delta.documents: version=10 rows=20
+delta.feedback: version=63 rows=73
+delta.documents: version=31 rows=37
+qdrant points: 37
 
-===== T1 INJECT — dừng feast (dependency KHÔNG bắt buộc). Dự đoán: degraded, /ready vẫn HTTP 200 =====
+===== T1 SỰ CỐ 1 — dừng feast (KHÔNG bắt buộc). Dự đoán: degraded, api 200, gateway VẪN 200 (còn trong rotation) =====
  Container lab28-platform-feast-1 Stopped 
-
-===== T2 OBSERVE =====
-http=200
-http=200
+api /ready http=200
+gateway /ready http=200
 status: degraded
    kafka ready= True | 1 broker(s); 4 declared topics present
-   mlflow ready= True | lab28-rag-release v1 is champion
-   qdrant ready= True | 20 points; ok
-   vllm ready= False | unreachable: ConnectError
+   mlflow ready= True | lab28-rag-release v8 is champion
+   qdrant ready= True | 37 points; ok
+   vllm ready= True | vLLM identity confirmed
    feast ready= False | unreachable: ConnectError
 
-===== T3 LEO THANG — dừng thêm qdrant (dependency BẮT BUỘC). Dự đoán: not_ready + HTTP 503 =====
+===== T2 /ask khi degraded — dự đoán: VẪN trả lời được, nhưng tự khai degraded =====
+trả lời: 1089 ký tự | sources: 3
+degraded: True
+lý do: ['feature store unavailable: Feast feature server unreachable: ConnectError']
+
+===== T3 SỰ CỐ 2 — dừng thêm qdrant (BẮT BUỘC). Dự đoán: not_ready, api 503, và gateway ĐẨY POD KHỎI ROTATION =====
  Container lab28-platform-qdrant-1 Stopped 
-http=503
+api /ready http=503
+gateway /ready http=503 | thân có 'components'? 0 (0 = 503 CỦA ENVOY, không phải của app)
 status: not_ready
    kafka ready= True | 1 broker(s); 4 declared topics present
-   mlflow ready= True | lab28-rag-release v1 is champion
-   qdrant ready= False | 0 points; ResponseHandlingException: [Errno -2] Name or serv
-   vllm ready= False | unreachable: ConnectError
+   mlflow ready= True | lab28-rag-release v8 is champion
+   qdrant ready= False | 0 points; ResponseHandlingException: [Errno -2] Name or
+   vllm ready= True | vLLM identity confirmed
    feast ready= False | unreachable: ConnectError
 
-===== T4 RECOVER — khởi động lại qdrant + feast =====
- Container lab28-platform-runtime-init-1 Exited 
+===== T4 KHÔI PHỤC — bật lại qdrant + feast =====
  Container lab28-platform-qdrant-1 Healthy 
  Container lab28-platform-feast-1 Healthy 
+chờ Envoy đưa pod trở lại rotation (health check 2s/lần, no_traffic_interval 60s)...
 
-===== T5 VERIFY — /ready trở lại degraded (chỉ còn vllm thiếu) =====
-http=200
-status: degraded
-   kafka ready= True | 1 broker(s); 4 declared topics present
-   mlflow ready= True | lab28-rag-release v1 is champion
-   qdrant ready= True | 20 points; ok
-   vllm ready= False | unreachable: ConnectError
-   feast ready= True | ok
+===== T5 XÁC NHẬN — dự đoán: trở lại ready, gateway 200 =====
+api /ready http=200
+gateway /ready http=200
+status: ready
+   kafka ready= True
+   mlflow ready= True
+   qdrant ready= True
+   vllm ready= True
+   feast ready= True
 
-===== T6 NO DATA LOSS — Delta version/rows so với T0 (feedback v16/25 rows, documents v10/20 rows) =====
-delta.feedback: version=16 rows=25
-delta.documents: version=10 rows=20
-qdrant points: 20
+===== T6 KHÔNG MẤT DỮ LIỆU — so với T0 (feedback v63/73 hàng, documents v31/37 hàng, qdrant 37 point) =====
+delta.feedback: version=63 rows=73
+delta.documents: version=31 rows=37
+qdrant points: 37

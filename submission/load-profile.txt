@@ -1,21 +1,21 @@
-# Load profile — 2026-09-03T10:11:41Z
+# Load profile — 2026-09-04T04:02:59Z, stack đầy đủ có vLLM thật trên RTX 5080
 
-## Qua Envoy gateway (rate limit 10 rps — 429 hiện ra dưới dạng status 0 vì urllib coi là exception)
+## A. /ready qua Envoy gateway (rate limit 10 rps)
 {
   "requests": 200,
   "workers": 8,
   "status_counts": {
-    "200": 13,
-    "0": 187
+    "200": 14,
+    "0": 186
   },
   "latency_ms": {
-    "p50": 0.8367479986191029,
-    "p95": 252.19978699897183,
-    "p99": 328.0514640009642
+    "p50": 0.7552720053354278,
+    "p95": 267.58343300025444,
+    "p99": 344.82849400956184
   }
 }
 
-## Trực tiếp FastAPI (bỏ qua rate limit — đo độ trễ ứng dụng)
+## B. /ready trực tiếp FastAPI (bỏ qua rate limit)
 {
   "requests": 200,
   "workers": 8,
@@ -23,24 +23,28 @@
     "200": 200
   },
   "latency_ms": {
-    "p50": 314.4864320001943,
-    "p95": 620.9404029996222,
-    "p99": 851.7914240001119
+    "p50": 323.0348240031162,
+    "p95": 538.920468010474,
+    "p99": 798.4731789911166
   }
 }
+
+## C. /api/v1/ask — đường phục vụ THẬT (retrieval + Feast + vLLM sinh chữ)
+workers=1  n=12 ok=12 p50=1334ms p95=2714ms p99=2714ms
+workers=4  n=12 ok=12 p50=1599ms p95=2179ms p99=2179ms
 
 ================================================================================
 # Phân tích nút thắt
 ================================================================================
 
-## Đo 1 — liveness so với readiness (FastAPI trực tiếp, 100 request, 8 worker)
+## Đo 1 — liveness so với readiness (100 request, 8 worker, gọi thẳng FastAPI)
 
   /health   p50   5,6 ms   p95   8,0 ms   p99   9,7 ms
   /ready    p50 306,9 ms   p95 799,2 ms   p99 879,8 ms
 
-`/health` không chạm dependency nào; `/ready` probe toàn bộ. Chênh **55 lần**
-nói thẳng: nút thắt KHÔNG nằm ở FastAPI hay ở tầng HTTP, mà nằm ở việc probe
-dependency được thực hiện **đồng bộ trên mỗi request**.
+`/health` không chạm dependency nào; `/ready` probe toàn bộ. Chênh **55 lần** nói
+thẳng: nút thắt KHÔNG nằm ở FastAPI hay tầng HTTP, mà ở việc probe dependency
+được thực hiện **đồng bộ trên mỗi request**.
 
 ## Đo 2 — thời gian từng probe, đo ngay trong container API (5 lần, ms)
 
@@ -48,13 +52,13 @@ dependency được thực hiện **đồng bộ trên mỗi request**.
   qdrant    146,2
   kafka      25,0
   feast      15,0
-  vllm       14,8      (ConnectError trả về nhanh, không phải timeout)
+  vllm       14,8
 
-Đối chiếu: gọi thẳng HTTP tới các dịch vụ đó từ host chỉ mất 1–6 ms
-(mlflow 5,6 · qdrant 1,3 · feast 1,1). Vậy chi phí nằm ở **phía client**, không
-phải ở server. Với MLflow, mỗi lần probe đều `download_artifacts` để phân giải
-alias `champion` — thấy rõ trong log API là dòng `Downloading artifacts:` lặp lại
-sau mỗi lần gọi `/ready`.
+Đối chiếu: gọi thẳng HTTP tới các dịch vụ đó chỉ mất 1–6 ms (mlflow 5,6 ·
+qdrant 1,3 · feast 1,1). Vậy chi phí nằm ở **phía client**, không phải ở server.
+Với MLflow, mỗi lần probe đều `download_artifacts` để phân giải alias
+`champion` — thấy rõ trong log API là dòng `Downloading artifacts:` lặp lại sau
+mỗi lần gọi `/ready`.
 
 ## Đo 3 — quét mức đồng thời trên /ready (96 request mỗi mức)
 
@@ -65,22 +69,32 @@ sau mỗi lần gọi `/ready`.
   workers=16   p50 421,8   p95 1010,3   p99 1072,0
   workers=32   p50 805,9   p95 1153,9   p99 1395,8
 
-p50 gần như phẳng tới 4 worker rồi tăng gần tuyến tính với mức đồng thời
-(8 → 16 → 32 cho 308 → 422 → 806 ms). Đó là dấu hiệu kinh điển của **hết
-headroom**: thêm tải không tăng thông lượng mà chỉ xếp hàng dài thêm. Điểm bão
-hoà nằm quanh **8 worker**.
+p50 phẳng tới 4 worker rồi tăng gần tuyến tính (8 → 16 → 32 cho 308 → 422 →
+806 ms). Dấu hiệu kinh điển của **hết headroom**: thêm tải không tăng thông
+lượng mà chỉ xếp hàng dài thêm. Điểm bão hoà quanh **8 worker**.
+
+## Đo 4 — đường /ask thật, sau khi nối vLLM
+
+  workers=1   p50 1334 ms   p95 2714 ms
+  workers=4   p50 1599 ms   p95 2179 ms
+
+Từ `audit.latency` của một phản hồi thật: `retrieval 1748 ms`, `llm 1777 ms`,
+`feature 547 ms`, `total 5042 ms`. Điều đáng chú ý: p50 chỉ tăng 20 % khi lên
+4 worker, trong khi p95 lại **giảm**. Đó là vì vLLM gộp lô (continuous batching)
+— nhiều request đồng thời chia nhau cùng một lượt chạy GPU, nên đường LLM chịu
+tải tốt hơn hẳn đường probe đồng bộ ở Đo 3.
 
 ## Kết luận
 
-1. Nút thắt là **phân giải release trên MLflow** (~387/588 ms ≈ 66% tổng thời
-   gian probe), do tải artifact lại ở mỗi lần gọi.
+1. Nút thắt của `/ready` là **phân giải release trên MLflow** (~387/588 ms ≈ 66 %
+   tổng thời gian probe), do tải artifact lại ở mỗi lần gọi.
 2. Cách sửa đúng không phải thêm CPU mà là **cache kết quả probe**: alias
-   `champion` đổi theo phút chứ không theo request. Cache 5–10 giây với
+   `champion` đổi theo phút chứ không theo request. Cache 5–10 giây kèm
    single-flight sẽ kéo p50 của `/ready` từ ~307 ms về gần mức của `/health`.
-3. Trước khi cache, `/ready` không nên đặt ở đường nóng có tần suất cao:
-   readiness probe của Kubernetes mặc định 10 s/lần thì hoàn toàn ổn, nhưng để
-   load balancer gọi mỗi request thì chính nó trở thành nguồn tải.
-4. Envoy rate limit 10 rps đứng trước API vô tình che mất vấn đề này: đo qua
-   gateway chỉ thấy 13/200 request đi lọt, p50 0,8 ms — con số đẹp nhưng vô
-   nghĩa, vì 187 request còn lại bị chặn từ trước khi chạm ứng dụng. Đây là lý
-   do phải đo **cả hai** đường.
+3. Trên đường `/ask`, nút thắt chia đôi giữa **retrieval** và **sinh chữ**.
+   Retrieval 1748 ms là chỗ đáng tối ưu trước, vì nó là tính toán lặp lại được
+   (cache theo câu hỏi) trong khi thời gian sinh chữ thì không.
+4. Envoy rate limit 10 rps đứng trước API vô tình che mất vấn đề: đo qua gateway
+   chỉ thấy 14/200 request đi lọt, p50 0,76 ms — con số đẹp nhưng vô nghĩa, vì
+   186 request còn lại bị chặn từ trước khi chạm ứng dụng. Đây là lý do phải đo
+   **cả hai** đường.

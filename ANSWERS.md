@@ -51,39 +51,91 @@ hay không tuỳ `LAB28_VLLM_REQUIRE_REAL`.
 
 ## 4. Sự cố đã tạo — dự đoán, quan sát, nguyên nhân, khôi phục
 
-Nhật ký đầy đủ: `submission/incident-drill.log`.
+Nhật ký đầy đủ: `submission/incident-drill.log`. Mỗi bước nói dự đoán **trước**
+khi chạy lệnh.
 
-| Mốc | Hành động | Dự đoán trước | Quan sát thật |
+| Mốc | Hành động | Dự đoán | Quan sát thật |
 |---|---|---|---|
-| T0 | baseline | `degraded` (thiếu vLLM) | `degraded`; Delta `feedback` v16/25 hàng, `documents` v10/20 hàng |
-| T1–T2 | `stop feast` | `degraded`, `/ready` **vẫn 200** | HTTP 200, `status=degraded`, `feast ready=False` |
-| T3 | `stop qdrant` (bắt buộc) | `not_ready`, `/ready` **503** | HTTP **503**, `status=not_ready` |
-| T4–T5 | khởi động lại cả hai | quay về `degraded` | HTTP 200, `status=degraded`, chỉ còn vLLM thiếu |
-| T6 | kiểm tra mất dữ liệu | version và số hàng **không đổi** | `feedback` v16/25 hàng, `documents` v10/20 hàng, Qdrant 20 point — **khớp T0** |
+| T0 | baseline | `ready` | `ready`; Delta `feedback` v63/73 hàng, `documents` v31/37 hàng, Qdrant 37 point |
+| T1 | `stop feast` (không bắt buộc) | `degraded`, gateway **vẫn 200** | api 200, gateway 200, `status=degraded` |
+| T2 | `/ask` khi đang degraded | vẫn trả lời được, tự khai lý do | 1089 ký tự + 3 nguồn, `degraded=true`, lý do `feature store unavailable` |
+| T3 | `stop qdrant` (bắt buộc) | `not_ready`, gateway **đẩy pod khỏi rotation** | api 503; gateway 503 **không có `components`** → 503 của chính Envoy |
+| T4–T5 | bật lại cả hai | quay về `ready` | api 200, gateway 200, `status=ready` |
+| T6 | kiểm tra mất dữ liệu | version và số hàng **không đổi** | v63/73, v31/37, 37 point — **khớp T0** |
 
-**Nguyên nhân:** dừng container có chủ đích. Điểm cần giải thích không phải "vì
-sao hỏng" mà là **vì sao hai lần hỏng cho hai trạng thái khác nhau** — đúng cây
+**Nguyên nhân:** dừng container có chủ đích. Điều cần giải thích không phải "vì
+sao hỏng" mà là **vì sao hai lần hỏng cho hai kết cục khác nhau** — đúng cây
 quyết định trong `readiness_status`: Feast không bắt buộc nên hệ thống hạ cấp và
 vẫn nhận request; Qdrant bắt buộc nên hệ thống tự loại mình khỏi rotation thay vì
 trả lời sai.
 
-**Không mất dữ liệu** vì trạng thái nằm ở Delta (log giao dịch trên đĩa) và ở
-volume Qdrant, không nằm trong bộ nhớ tiến trình; khởi động lại container đọc lại
-đúng version cũ.
+Chi tiết đáng nói nhất ở T3 là **cách phân biệt hai loại 503**. 503 của *ứng
+dụng* mang theo `components` — pod còn trong rotation và đang tự khai vì sao nó
+chưa sẵn sàng. 503 của *gateway* thì không có gì cả — nghĩa là Envoy đã không còn
+upstream nào khoẻ để chuyển tiếp. Chỉ loại thứ hai mới chứng minh pod thực sự ra
+khỏi rotation, và nó chỉ xuất hiện sau khi tôi sửa health-check ở mục 6b.
 
-## 5. IP07 — vì sao chưa đạt
+**Không mất dữ liệu** vì trạng thái nằm ở Delta (log giao dịch trên đĩa) và volume
+Qdrant, không nằm trong bộ nhớ tiến trình; khởi động lại container đọc lại đúng
+version cũ.
 
-Máy chạy bài không có GPU. `evidence/ip07-vllm-identity.json` ghi trung thực:
-`reachable=false`, `is_real_vllm=false`, `vllm_metric_count=0`. `/ask` trả
-**503 `dependency_unavailable`** kèm `trace_id`, không trả lời bịa.
+**Alert có kêu thật, không chỉ tồn tại trong file** (`submission/alert-drill.log`):
+dừng API → `Lab28ApiUnavailable` chuyển `pending` sau 24 s → **`firing`** sau
+49 s → tự tắt sau khi khôi phục. `for=30s` là thứ giữ cho nó không kêu vì một lần
+scrape trượt.
 
-Lab cấm giả lập vLLM, và điều đó đúng: một server chỉ nói được giao thức OpenAI
-thì không chứng minh được `/version` là bản dựng vLLM, không có `/v1/models` đúng
-model ID, không phát metric tiền tố `vllm:`. Dựng mock sẽ làm 16 test `gpu`/
-`langsmith` chuyển xanh mà **không** chứng minh thêm được gì. Chỗ này để
-`UNVERIFIED` theo đúng hướng dẫn `SUBMISSION.md`; khi có endpoint vLLM thật từ
-Kaggle/máy chung, chỉ cần đặt `LAB28_VLLM_BASE_URL` + `LAB28_VLLM_MODEL_ID` là
-chạy tiếp, không phải sửa mã.
+## 5. IP07 — vLLM thật trên GPU của máy
+
+Máy chạy bài có **NVIDIA RTX 5080 (15,92 GiB)** và runtime `nvidia` của Docker,
+nên IP07 chạy được tại chỗ bằng `compose.gpu.yaml` của lab, không cần Kaggle:
+
+```text
+docker compose -f compose.yaml -f compose.gpu.yaml --env-file ports.template \
+  --profile full --profile gpu up -d --wait
+```
+
+Ba bằng chứng mà gate IP07 đòi, không cái nào giả lập được:
+
+| Yêu cầu | Kết quả thật |
+|---|---|
+| `/version` là bản dựng vLLM | `{"version":"0.28.0"}` |
+| `/v1/models` có đúng model đã cấu hình | `["Qwen/Qwen3-1.7B"]` |
+| `/metrics` phát series tiền tố `vllm:` | **364 series**, gồm `vllm:e2e_request_latency_seconds`, `vllm:cache_config_info` |
+
+`lab28 inspect` kết luận `is_real_vllm: true`, `detail: "vLLM identity confirmed"`,
+và `lab28 ready` trả **`ready`** — không còn `degraded`.
+
+Một lời hỏi thật đi hết đường phục vụ, trả về đủ dấu vết đối chiếu:
+`trace_id`, `mlflow_release_version`, `vllm_model_id=Qwen/Qwen3-1.7B`,
+`prompt_tokens=472`, `completion_tokens=320`, và phân rã độ trễ
+`retrieval 1748 ms / llm 1777 ms / total 5042 ms`.
+
+### Hai rào chắn phải vượt, và vì sao cách vượt là hợp lệ
+
+**1. Hết bộ nhớ GPU khi khởi động.**
+
+```text
+ValueError: Free memory on device cuda:0 (14.6/15.92 GiB) on startup is less
+than desired GPU memory utilization (0.92, 14.65 GiB)
+```
+
+Desktop đang dùng ~1,3 GiB nên mặc định 0,92 của vLLM không vừa. Hạ xuống
+`--gpu-memory-utilization 0.80` (12,7 GiB) — thừa cho Qwen3-1.7B (~3,4 GiB trọng
+số) cộng KV cache.
+
+**2. `RuntimeError: UVA is not available`.**
+
+vLLM tắt pinned memory khi phát hiện WSL, mà UVA lại cần nó. Điều đáng nói là
+tôi **không** vá vòng qua: đọc `vllm/platforms/cuda.py` thì thấy chính vLLM ghi
+rõ *"On compatible WSL2 kernels, pinned memory is supported but disabled by
+default. Enable it via `VLLM_WSL2_ENABLE_PIN_MEMORY=1`"*, với ngưỡng kernel
+≥ 4.19.121. Kernel máy này là `6.6.87.1-microsoft-standard-WSL2`, vượt xa ngưỡng
+đó. Trước khi bật cờ, tôi đo thực tế trong chính container: cấp phát pinned 64 MB
+thành công, copy H2D 10 lần đạt ~43 GB/s. Nên đây là **cờ chính thức dùng đúng
+trường hợp nó được thiết kế cho**, không phải mẹo lách một phép kiểm tra an toàn.
+
+Cả hai thay đổi nằm trong `compose.override.yaml` (đã gitignore) — `compose.gpu.yaml`
+của lab giữ nguyên, và bỏ file override đi thì repo chạy đúng cấu hình gốc.
 
 ## 6. Điều khó nhất
 
@@ -169,6 +221,67 @@ mới phân biệt được "đã sửa" với "chưa gặp lại". Thứ ba: **
 `datetime` về mặt kỹ thuật thì đúng — nó thật sự khử được cú vọt — nhưng nó phá
 hai thư viện lớn, và một bản vá đúng-mà-hỏng-hệ-thống thì tệ hơn là không vá.
 
+## 6b. Hai lỗi nữa chỉ lộ ra khi có GPU
+
+15 test gắn nhãn `gpu` trước đây luôn bị skip, nên hai lỗi này nằm im cho tới
+khi vLLM thật chạy.
+
+### Envoy health-check trỏ nhầm vào liveness (IP08)
+
+`test_the_gateway_stops_routing_to_a_pod_that_is_not_ready` timeout 120 s. Chính
+docstring của nó nói trước nghi phạm — `healthy_panic_threshold` mặc định 50 %
+của Envoy — nhưng `gateway/envoy.yaml` đã đặt `{value: 0}` rồi. Nguyên nhân thật
+nằm một dòng bên trên:
+
+```yaml
+http_health_check: {path: /health}
+```
+
+`/health` là **liveness**: nó trả 200 chừng nào tiến trình còn phục vụ được HTTP
+và **không bao giờ** chạm dependency. Nên khi pod đã `not_ready`, Envoy vẫn thấy
+nó khoẻ và tiếp tục đẩy traffic sang — đúng thứ test này sinh ra để bắt. Test
+phân biệt hai loại 503 bằng thân phản hồi: 503 của ứng dụng có `components`,
+503 của gateway thì không.
+
+Sửa: health-check trỏ `/ready`. Đây là ngữ nghĩa đúng của một load balancer —
+**rotation đi theo readiness, không phải liveness**. Báo cáo degraded vẫn xem
+được qua gateway vì `degraded` trả 200 và ở lại rotation; chỉ `not_ready` mới bị
+eject, và với `healthy_panic_threshold: 0` thì một host bị eject nghĩa là người
+gọi nhận 503 của chính Envoy.
+
+Kiểm chứng sau khi sửa: `test_j4_degraded_recovery.py` **13/13 passed**. Quan sát
+thêm ở Envoy admin: lúc vLLM đang nạp model, `health_flags::/failed_active_hc`
+và gateway trả 503; model nạp xong thì `health_check.success` tăng dần và host
+về `healthy` — vòng eject/khôi phục chạy đúng cả hai chiều.
+
+### Cú vọt đồng hồ giết Spark Connect (IP03)
+
+Container `spark-connect` chết `exit 56` giữa lúc chạy J2/J3, hai lần:
+
+```
+RpcEndpointNotFoundException: Cannot find endpoint: spark://CoarseGrainedScheduler@...
+ERROR Executor: Exit as unable to send heartbeats to driver more than 60 times
+```
+
+Triệu chứng phía test là **4 DAG run Airflow timeout 300 s** — trỏ hoàn toàn
+nhầm sang Airflow. Lần đầu tôi tin là thiếu RAM (`free -g` còn 1 GB), nhưng
+`OOMKilled=false`, và lần thứ hai nó chết khi RAM còn trống **11 GB**. Chính
+điều đó loại bỏ giả thuyết RAM.
+
+Nguyên nhân là cú vọt +579,6 s đã nói ở mục 6. Spark chạy trên JVM nên clockguard
+không với tới: `System.currentTimeMillis()` là native. `spark.network.timeout`
+mặc định **120 s** < 579,6 s, nên driver kết luận executor đã mất tích và gỡ
+`CoarseGrainedScheduler`.
+
+Không vá được đồng hồ JVM, nên tôi nới **ngưỡng chịu đựng** cho dài hơn một cú
+vọt: `spark.network.timeout=900s`, `spark.executor.heartbeatInterval=60s`. Đây
+là cấu hình hợp lệ của Spark cho môi trường đồng hồ/mạng không ổn định.
+
+Nguyên tắc rút ra áp cho mọi thành phần không phải Python: khi không sửa được
+đồng hồ, hãy nới timeout dài hơn cú vọt — Kafka `session.timeout.ms`, etcd lease,
+gRPC keepalive đều cùng dạng. Dấu hiệu nhận ra sớm: **container chết với exit
+code lạ trong khi `OOMKilled=false` và RAM còn dư.**
+
 ## 7. Trade-off đã chọn
 
 - **Dedupe ở tầng Python thay vì trong Spark job.** Chậm hơn một chút và phải giữ
@@ -183,8 +296,12 @@ hai thư viện lớn, và một bản vá đúng-mà-hỏng-hệ-thống thì t
   làm hỏng chính thứ IP08 phải chứng minh. Chọn: nạp dữ liệu **trực tiếp** vào
   API (13 documents + 12 feedback, 0 rejected) và giữ đường gateway ở nhịp thấp
   để 429 vẫn là bằng chứng thật.
-- **Không dựng vLLM giả.** Đánh đổi 16 test xanh lấy một bộ bằng chứng trung
-  thực. Xem mục 5.
+- **Chạy vLLM thật trên GPU chứ không dựng mock.** Trước khi phát hiện máy có
+  RTX 5080, phương án dễ là dựng một server OpenAI-compatible để 16 test gated
+  chuyển xanh. Tôi không làm, vì mock không dựng được `/version` của vLLM, không
+  có `/v1/models` đúng model ID và không phát metric `vllm:` — nó chỉ làm đẹp
+  bảng kết quả chứ không chứng minh gì. Bỏ công dựng GPU thật đắt hơn nhưng là
+  thứ duy nhất qua được gate. Xem mục 5.
 - **Vá đồng hồ bằng `PYTHONPATH` thay vì sửa `compose.yaml`.** Bỏ
   `compose.override.yaml` đi là repo chạy đúng cấu hình gốc; `docker compose -f
   compose.yaml --env-file ports.template --profile full config` vẫn sạch.
@@ -223,6 +340,9 @@ dùng file `ports.local` (đã gitignore, **không chứa mật khẩu**) để 
 **phía host**: API 8100, Prometheus 9190, Qdrant 6433, Pushgateway 9191. Cổng
 trong mạng Docker giữ nguyên. Mọi lệnh trong `PROOF.md` dùng
 `--env-file ports.local` thay cho `ports.template`.
+
+`compose.override.yaml` còn chứa hai chỉnh sửa cho vLLM (`--gpu-memory-utilization
+0.80` và `VLLM_WSL2_ENABLE_PIN_MEMORY=1`), lý do ở mục 5.
 
 `ports.local` và `compose.override.yaml` **không** được nộp: chúng là cấu hình
 riêng của máy chạy, và bỏ chúng đi thì repo chạy đúng như cấu hình gốc của lab.

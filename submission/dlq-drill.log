@@ -1,0 +1,35 @@
+# DLQ drill — 2026-09-04T04:01:58Z
+# IP02 yêu cầu chứng minh 'consume, retry và hàng lỗi'.
+
+===== 1. Trạng thái hàng lỗi =====
+      "original_partition": 0,
+      "original_offset": 103,
+      "original_key": "it-j4-poison-865623cf",
+      "error_category": "validation",
+      "error_detail": "1 validation error for IngestionEvent\n  Invalid JSON: key must be a string at line 1 column 49 [type=json_invalid, input_value=b'{\"schema_version\": \"1\",...: \"865623cf\", truncated', input_type=bytes]\n    For further information visit https://errors.pydantic.dev/2.12/v/json_invalid",
+      "attempts": 1,
+      "failed_at": "2026-09-04T03:52:58.067089Z",
+      "traceparent": null,
+      "raw_payload_b64": "eyJzY2hlbWFfdmVyc2lvbiI6ICIxIiwgImV2ZW50X2lkIjogIjg2NTYyM2NmIiwgdHJ1bmNhdGVk"
+    },
+    {
+      "schema_version": "1",
+      "original_topic": "data.raw",
+      "original_partition": 0,
+      "original_offset": 104,
+      "original_key": "it-j4-replay-cd9e929b",
+      "error_category": "internal",
+      "error_detail": "parked by the live suite to exercise the operator replay path",
+      "attempts": 3,
+      "failed_at": "2026-09-04T04:03:40.396713Z",
+      "traceparent": "00-c4c2efd964e4599086ead9a6b26f0bb4-7c92fdd0793be9a9-01",
+      "raw_payload_b64": "eyJzY2hlbWFfdmVyc2lvbiI6IjEiLCJldmVudF9pZCI6ImRmOTg1NmM0ZmU4MTRhYzg5M2Q0OWY3ZDA3ODYwYzI0IiwiaWRlbXBvdGVuY3lfa2V5IjoiZmI6aXQtajQtcmVwbGF5LWNkOWU5MjliOjJjNTM5NDBkMzA4MDNlYjQyMjliZTBiMTA5MjE4MTc4IiwiZW50aXR5X2lkIjoiaXQtajQtcmVwbGF5LWNkOWU5MjliIiwib2NjdXJyZWRfYXQiOiIyMDI2LTA5LTA0VDA0OjAzOjE2LjM5MDgxM1oiLCJwcm9kdWNlciI6ImxhYjI4LWFwaSIsInRyYWNlcGFyZW50IjoiMDAtYzRjMmVmZDk2NGU0NTk5MDg2ZWFkOWE2YjI2ZjBiYjQtYjc2ODY3OTZkYmFiOTc2Yi0wMSIsInBheWxvYWQiOnsia2luZCI6ImZlZWRiYWNrIiwiYXNrZXJfaWQiOiJpdC1qNC1yZXBsYXktY2Q5ZTkyOWIiLCJ0ZXh0IjoiUGjhuqNuIGjhu5NpIMSRxrDhu6NjIHBow6F0IGzhuqFpIHThu6sgaMOgbmcgxJHhu6NpIGzhu5dpIGNkOWU5MjliLiIsInJhdGluZyI6MywibG9jYWxlIjoidmkiLCJsYWJlbCI6Im5ldXRyYWwifX0="
+    }
+  ]
+}
+
+===== 2. Replay có kiểm soát (hành động của người vận hành, KHÔNG tự động) =====
+{
+  "replayed": 1,
+  "skipped": 4
+}

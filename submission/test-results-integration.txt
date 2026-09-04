@@ -1,8 +1,8 @@
-# Kết quả integration tests — 2026-09-03T11:27:30Z
-# Stack: docker compose --profile full, 14 service healthy
-# Lần chạy này dùng bản vá đồng hồ CUỐI CÙNG (chỉ time.time + localtime),
-# sau khi đã gỡ bỏ bản vá datetime vì nó phá MLflow và Airflow.
+# Kết quả integration tests — 2026-09-04T04:03:58Z
+# Stack: docker compose -f compose.yaml -f compose.gpu.yaml --profile full --profile gpu
+# 15 service healthy, vLLM 0.28.0 thật chạy Qwen/Qwen3-1.7B trên RTX 5080.
+# Chỉ 1 test bị bỏ qua: nhóm langsmith, vì lớp không cấp LANGSMITH_API_KEY.
 
-$ uv run pytest integration-tests -m "not gpu and not langsmith" -q
-........................................................                 [100%]
-56 passed, 16 deselected in 216.68s (0:03:36)
+$ uv run pytest integration-tests -m "not langsmith" -q
+.......................................................................  [100%]
+71 passed, 1 deselected in 360.06s (0:06:00)

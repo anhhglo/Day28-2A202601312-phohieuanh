@@ -4,71 +4,71 @@
       "job": "lab28-airflow-batch",
       "url": "http://pushgateway:9091/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:36:45.185643968Z",
+      "last_scrape": "2026-09-04T03:55:10.363842543Z",
       "last_error": ""
     },
     {
       "job": "lab28-api",
       "url": "http://api:8000/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:27:04.274751567Z",
+      "last_scrape": "2026-09-04T03:55:13.720084298Z",
       "last_error": ""
     },
     {
       "job": "lab28-collector",
       "url": "http://otel-collector:8888/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:27:03.035734219Z",
+      "last_scrape": "2026-09-04T04:03:12.086951152Z",
       "last_error": ""
     },
     {
       "job": "lab28-feast",
       "url": "http://feast:8000/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:32:20.032747691Z",
+      "last_scrape": "2026-09-04T03:55:09.224150028Z",
       "last_error": ""
     },
     {
       "job": "lab28-gateway",
       "url": "http://gateway:9901/stats/prometheus",
       "health": "up",
-      "last_scrape": "2026-09-03T11:27:03.306933781Z",
+      "last_scrape": "2026-09-04T03:55:13.794293205Z",
       "last_error": ""
     },
     {
       "job": "lab28-kafka",
       "url": "http://kafka-exporter:9308/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:34:55.313403512Z",
+      "last_scrape": "2026-09-04T04:03:12.024406443Z",
       "last_error": ""
     },
     {
       "job": "lab28-mlflow",
       "url": "http://api:8000/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:27:06.728125849Z",
+      "last_scrape": "2026-09-04T03:55:09.717937106Z",
       "last_error": ""
     },
     {
       "job": "lab28-prometheus",
       "url": "http://prometheus:9090/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:36:15.450545319Z",
+      "last_scrape": "2026-09-04T03:55:13.365734796Z",
       "last_error": ""
     },
     {
       "job": "lab28-qdrant",
       "url": "http://qdrant:6333/metrics",
       "health": "up",
-      "last_scrape": "2026-09-03T11:27:07.194747256Z",
+      "last_scrape": "2026-09-04T04:03:12.676185417Z",
       "last_error": ""
     },
     {
       "job": "lab28-vllm-optional",
       "url": "http://host.docker.internal:8001/metrics",
-      "health": "down",
-      "last_scrape": "2026-09-03T11:36:25.460903076Z",
-      "last_error": "Get \"http://host.docker.internal:8001/metrics\": dial tcp 172.17.0.1:8001: connect: connection refused"
+      "health": "up",
+      "last_scrape": "2026-09-04T04:04:36.48969068Z",
+      "last_error": ""
     }
   ],
   "rules": [
